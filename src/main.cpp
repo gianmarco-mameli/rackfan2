@@ -5,17 +5,38 @@
 #include <sstream>
 #include <private.h>
 
+// wifi
 const char ssid[] = SECRET_SSID;
 const char pass[] = SECRET_PASS;
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 const char *mqtt_broker = "192.168.1.1";
 const int mqtt_port = 1883;
 
-const char *client_id = "rackfan2";
-const char *fan1_status_topic = "rackfan2/fan1/status";
-const char *fan2_status_topic = "rackfan2/fan2/status";
-const char *fan1_topic = "rackfan2/fan1/state";
-const char *fan2_topic = "rackfan2/fan2/state";
+#ifdef LEFT
+  const char *client_id = "rackfanleft";
+  const char *fan1_status_topic = "rackfanleft/fan1/status";
+  const char *fan2_status_topic = "rackfanleft/fan2/status";
+  const char *fan1_topic = "rackfanleft/fan1/state";
+  const char *fan2_topic = "rackfanleft/fan2/state";
+#endif
+#ifdef RIGHT
+  const char *client_id = "rackfanright";
+  const char *fan1_status_topic = "rackfanright/fan1/status";
+  const char *fan2_status_topic = "rackfanright/fan2/status";
+  const char *fan1_topic = "rackfanright/fan1/state";
+  const char *fan2_topic = "rackfanright/fan2/state";
+#endif
+#ifdef CENTER
+  const char *client_id = "rackfancenter";
+  const char *fan1_status_topic = "rackfancenter/fan1/status";
+  const char *fan2_status_topic = "rackfancenter/fan2/status";
+  const char *fan1_topic = "rackfancenter/fan1/state";
+  const char *fan2_topic = "rackfancenter/fan2/state";
+#endif
+
+
 
 int fan1_status = 0;
 int fan2_status = 0;
@@ -24,8 +45,7 @@ char in_message[100];
 #define fan1 1
 #define fan2 3
 
-WiFiClient espClient;
-PubSubClient client(espClient);
+unsigned long previousMillis = 0;
 
 void callback(char *topic, byte *payload, unsigned int length)
 {
@@ -47,21 +67,17 @@ void callback(char *topic, byte *payload, unsigned int length)
 
 void InitWiFi()
 {
-  if (WiFi.status() == WL_NO_SHIELD)
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, pass);
+  // Serial.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED)
   {
-    while (true)
-      ;
+    // Serial.print('.');
+    delay(1000);
   }
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    WiFi.begin(ssid, pass);
-  }
-}
-
-void InitMqtt()
-{
-  client.setServer(mqtt_broker, mqtt_port);
-  client.setCallback(callback);
+  // Serial.println(WiFi.localIP());
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
 }
 
 void reconnect()
@@ -70,44 +86,49 @@ void reconnect()
   {
     if (client.connect(client_id))
     {
-      client.publish(fan1_status_topic, "connected");
-      client.publish(fan2_status_topic, "connected");
-      delay(500);
-      client.publish(fan1_topic, "1", true);
-      client.publish(fan2_topic, "1", true);
-      delay(500);
-      client.subscribe(fan1_topic, 1);
-      client.subscribe(fan2_topic, 1);
+      Serial.println("MQTT broker connected");
+      client.publish(status_topic, "connected");
+      client.publish(motion_topic, "0", true);
     }
     else
     {
+      Serial.print("failed with state ");
+      Serial.print(client.state());
       delay(5000);
     }
   }
 }
 
+void InitMqtt()
+{
+  client.setServer(mqtt_broker, mqtt_port);
+  // client.setCallback(callback);
+  reconnect();
+}
+
 void setup()
 {
-  pinMode(fan1, OUTPUT);
-  pinMode(fan2, OUTPUT);
-  delay(1000);
-  digitalWrite(fan1, HIGH);
-  digitalWrite(fan2, HIGH);
-  delay(1000);
   InitWiFi();
   delay(1000);
   InitMqtt();
+  delay(1000);
+
+  pinMode(fan1, OUTPUT);
+  pinMode(fan2, OUTPUT);
+  digitalWrite(fan1, HIGH);
+  digitalWrite(fan2, HIGH);
 }
 
 void loop()
 {
-  if (!client.connected())
-  {
-    reconnect();
-  }
-  client.loop();
 
-  if (fan1_status == 0)
+  if (client.connected())
+  {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= 5000)
+    {
+      previousMillis = currentMillis;
+      if (fan1_status == 0)
   {
     digitalWrite(fan1, LOW);
     client.publish(fan1_status_topic, "off");
@@ -128,5 +149,10 @@ void loop()
     digitalWrite(fan2, HIGH);
     client.publish(fan2_status_topic, "on");
   }
-  delay(5000);
+    }
+  }
+  else
+  {
+    reconnect();
+  }
 }
