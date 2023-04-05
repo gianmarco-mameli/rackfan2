@@ -39,9 +39,9 @@ const char *fan1_topic = "rackfancenter/fan1/state";
 const char *fan2_topic = "rackfancenter/fan2/state";
 #endif
 
-int fan1_status = 0;
-int fan2_status = 0;
-char in_message[100];
+uint8_t fan1_status = 1;
+uint8_t fan2_status = 1;
+
 
 #define fan1 1
 #define fan2 3
@@ -50,20 +50,25 @@ unsigned long previousMillis = 0;
 
 void callback(char *topic, byte *payload, unsigned int length)
 {
-  client.publish(status_topic, "receiving");
+  char in_message[5];
   unsigned int i = 0;
   for (; i < length; i++)
   {
     in_message[i] = char(payload[i]);
   }
   in_message[i] = '\0';
+
   if (strcmp(topic, fan1_topic) == 0)
   {
+
     fan1_status = atoi(in_message);
+    // digitalWrite(fan1, fan1_status);
+
   }
   if (strcmp(topic, fan2_topic) == 0)
   {
     fan2_status = atoi(in_message);
+    // digitalWrite(fan1, fan2_status);
   }
 }
 
@@ -88,17 +93,17 @@ void reconnect()
   {
     if (client.connect(client_id))
     {
-      Serial.println("MQTT broker connected");
+      // Serial.println("MQTT broker connected");
       client.publish(status_topic, "connected");
-      client.publish(fan1_topic, "1");
-      client.publish(fan2_topic, "1");
+      client.publish(fan1_topic, "1", true);
+      client.publish(fan2_topic, "1", true);
       client.subscribe(fan1_topic);
       client.subscribe(fan2_topic);
     }
     else
     {
-      Serial.print("failed with state ");
-      Serial.print(client.state());
+      // Serial.print("failed with state ");
+      // Serial.print(client.state());
       delay(5000);
     }
   }
@@ -107,26 +112,26 @@ void reconnect()
 void InitMqtt()
 {
   client.setServer(mqtt_broker, mqtt_port);
-  // client.setCallback(callback);
+  client.setCallback(callback);
   reconnect();
 }
 
 void setup()
 {
+  pinMode(fan1, OUTPUT);
+  pinMode(fan2, OUTPUT);
+  delay(500);
+  digitalWrite(fan1, fan1_status);
+  digitalWrite(fan2, fan2_status);
+  delay(500);
+
   InitWiFi();
   delay(1000);
   InitMqtt();
-  delay(1000);
-
-  pinMode(fan1, OUTPUT);
-  pinMode(fan2, OUTPUT);
-  digitalWrite(fan1, HIGH);
-  digitalWrite(fan2, HIGH);
 }
 
 void loop()
 {
-
   if (client.connected())
   {
     unsigned long currentMillis = millis();
@@ -134,11 +139,13 @@ void loop()
     {
       previousMillis = currentMillis;
       client.loop();
+
       if (fan1_status == 0)
       {
         digitalWrite(fan1, LOW);
         client.publish(fan1_status_topic, "off");
       }
+      // if (fan1_status == 1)
       else
       {
         digitalWrite(fan1, HIGH);
@@ -151,6 +158,7 @@ void loop()
         client.publish(fan2_status_topic, "off");
       }
       else
+      // if (fan2_status == 1)
       {
         digitalWrite(fan2, HIGH);
         client.publish(fan2_status_topic, "on");
